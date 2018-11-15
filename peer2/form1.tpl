@@ -13,7 +13,6 @@
 			</ul><input type='submit' value='Submit Form'>
 		</fieldset>
 	</form>
-	% if message == 'error':
-		<p>Invalid IP address or port number.</p>
+	<p>{{message}}</p>
   </body>
 </html>

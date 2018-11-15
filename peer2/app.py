@@ -5,20 +5,8 @@ import time
 import sys
 
 app = Bottle()
+p = 1
 
-print 'Starting Peer....'
-p = Peer('10.42.0.54',8080)
-p.register_peer()
-
-print 'Starting Peer Server Daemon Thread...'
-server_thread = PeerOperations(1, "PeerServer", p)
-server_thread.setDaemon(True)
-server_thread.start()
-
-print "Starting File Handler Deamon Thread..."
-file_handler_thread = PeerOperations(2, "PeerFileHandler", p)
-file_handler_thread.setDaemon(True)
-file_handler_thread.start()
 # In[97]:
 
 @app.route('/')
@@ -33,14 +21,26 @@ def index():
 def formhandler():
 		"""Handle the form submission"""
 		
-		# title = request.forms.get('title')
-		# ip = request.forms.get('ip')
-		# port = request.forms.get('port')
-		
-		# if ip != '172.24.1.15' or port != '8080':
-		# 	return template('form1.tpl', message='error')
+		ip = request.forms.get('ip')
+		port = request.forms.get('port')
+		# try:
+		print 'Starting Peer....'
+		global p
+		p = Peer(ip,int(port))
+		p.register_peer()
 
+		print 'Starting Peer Server Daemon Thread...'
+		server_thread = PeerOperations(1, "PeerServer", p)
+		server_thread.setDaemon(True)
+		server_thread.start()
+
+		print "Starting File Handler Deamon Thread..."
+		file_handler_thread = PeerOperations(2, "PeerFileHandler", p)
+		file_handler_thread.setDaemon(True)
+		file_handler_thread.start()
 		redirect('/choose')
+		# except:
+		# 	return template('form1.tpl',message='error')
 
 @app.route('/choose')
 def choose():
@@ -49,7 +49,7 @@ def choose():
 @app.route('/choose',method='POST')
 def handle_choice():
 
-
+	global p
 	choice = request.forms.get('choice')
 
 	if choice == '1':
@@ -70,7 +70,7 @@ def handle_choice():
 	elif choice == '4':
 		p.log_out()
 		time.sleep(1)
-		sys.exit(1)
+		redirect('/')
 	# print choice
 	return template('form2.tpl',message=['Invalid choice'])
 
@@ -93,6 +93,7 @@ def download_get():
 def do_download():
 	filename = request.forms.get('filename')
 	peerid = request.forms.get('peerid')
+	global p
 	req = p.get_file(filename,peerid)
 	return template('download.tpl',message=req)
 
