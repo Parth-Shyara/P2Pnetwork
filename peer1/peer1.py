@@ -101,18 +101,18 @@ class PeerOperations(threading.Thread):
 				for file in os.listdir(PUBLIC_DIR):
 					curr_filelist.append(file)
 
-				print curr_filelist, self.peer.file_list
+				# print curr_filelist, self.peer.file_list
 				added_files = list(set(curr_filelist)-set(self.peer.file_list))
 
 				removed_files = list(set(self.peer.file_list)-set(curr_filelist))
-				print added_files, removed_files
+				# print added_files, removed_files
 
 				if len(added_files) > 0:
 					peer_to_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 					peer_to_server_socket.setsockopt(
 						socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 					peer_to_server_socket.connect(
-						(self.peer.peer_hostname, self.peer.server_port))
+						(self.peer.server_ip, self.peer.server_port))
 
 					cmd_issue = {
 						'command' : 'update',
@@ -134,7 +134,7 @@ class PeerOperations(threading.Thread):
 					peer_to_server_socket.setsockopt(
 						socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 					peer_to_server_socket.connect(
-						(self.peer.peer_hostname, self.peer.server_port))
+						(self.peer.server_ip, self.peer.server_port))
 
 					cmd_issue = {
 						'command' : 'update',
@@ -166,7 +166,7 @@ class PeerOperations(threading.Thread):
 
 class Peer():
 	def __init__(self, ip, port):
-		self.peer_hostname = socket.gethostname()
+		# self.peer_hostname = socket.gethostname()
 		self.server_ip = ip
 		self.server_port = port
 		self.file_list = []
