@@ -1,6 +1,6 @@
 from bottle import *
 # from server import *
-from peer1 import *
+from peer import *
 import time
 import sys
 
