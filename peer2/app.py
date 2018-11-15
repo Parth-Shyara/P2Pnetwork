@@ -92,9 +92,9 @@ def download_get():
 @app.route('/download',method='POST')
 def do_download():
 	filename = request.forms.get('filename')
-	peerid = request.forms.get('peerid')
+	# peerid = request.forms.get('peerid')
 	global p
-	req = p.get_file(filename,peerid)
+	req = p.get_files_concurrently(filename)
 	return template('download.tpl',message=req)
 
 app.run(port=3421)

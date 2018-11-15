@@ -8,7 +8,7 @@
 			<legend>DOWNLOAD FORM</legend>
 			<ul>
 				<li>Filename: <input name='filename'></li>
-				<li>PeerID: <input name='peerid'></li>
+				<!-- <li>PeerID: <input name='peerid'></li> -->
 			</ul><input type='submit' value='Submit Form'>
 		</fieldset>
 	</form>
