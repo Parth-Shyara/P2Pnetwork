@@ -1,6 +1,5 @@
 import socket 
 import argparse
-from ipaddress import IPv4Address
 import os
 import sys
 import json
@@ -28,13 +27,18 @@ class PeerOperations(threading.Thread):
 		self.peer = peer
 		self.listener_queue = Queue()
 
+	def get_my_ip(self):
+		s=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		s.connect(("8.8.8.8", 80))
+		return s.getsockname()[0]
+
 	def listener(self):
 		try:
 			listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-			listener_host = socket.gethostbyname(socket.getfqdn())
-			listener_host = '10.42.0.54'
-			print '$$$$$$  ', listener_host
+			listener_host = self.get_my_ip()
+			# listener_host = '10.42.0.54'
+			# print '$$$$$$  ', listener_host
 			listener_port = self.peer.host_port
 			listener_socket.bind((listener_host,listener_port))
 			listener_socket.listen(8)
@@ -97,9 +101,11 @@ class PeerOperations(threading.Thread):
 				for file in os.listdir(PUBLIC_DIR):
 					curr_filelist.append(file)
 
+				print curr_filelist, self.peer.file_list
 				added_files = list(set(curr_filelist)-set(self.peer.file_list))
 
 				removed_files = list(set(self.peer.file_list)-set(curr_filelist))
+				print added_files, removed_files
 
 				if len(added_files) > 0:
 					peer_to_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -152,7 +158,7 @@ class PeerOperations(threading.Thread):
 			sys.exit(1)
 
 	def run(self):
-		print '........................'
+		# print '........................'
 		if self.name == 'PeerServer':
 			self.server()
 		elif self.name == 'PeerFileHandler':
@@ -273,7 +279,7 @@ class Peer():
 			# recv_data = json.loads(ps_socket.recv(1024000))
 			recv_data = ps_socket.recv(1024000)
 			# print ps_socket.recv(1024000)
-			print '###### ',recv_data
+			# print '###### ',recv_data
 			f = open(PUBLIC_DIR+ '/' + f_name, 'wb')
 			f.write(recv_data)
 			f.close()
@@ -318,7 +324,7 @@ if __name__ == '__main__':
 
 		print "Starting Peer Server Deamon Thread..."
 		server_thread = PeerOperations(1,'PeerServer', peer)
-		print '********************'
+		# print '********************'
 		server_thread.setDaemon(True)
 		server_thread.start()
 
