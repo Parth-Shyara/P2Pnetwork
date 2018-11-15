@@ -2,7 +2,7 @@ import argparse
 import sys
 import threading
 import socket
-import queue
+import Queue
 from concurrent import futures
 import json
 
@@ -20,7 +20,7 @@ class IndexServer(threading.Thread):
 		self.threadName = name
 		self.port = server_port
 		self.ip = server_ip
-		self.waiting_pool = queue.Queue()  #waiting list of available connections
+		self.waiting_pool = Queue.Queue()  #waiting list of available connections
 		self.registered_files = {} #(file,peerids) key value pairs
 		self.peer_files = {} #(peerid,files) key value pairs
 		self.peer_ports = {} #(port_no, ip) key value pairs
@@ -42,7 +42,7 @@ class IndexServer(threading.Thread):
 
 	def list_files(self):
 		try:
-			return registered_files.keys()
+			return self.registered_files.keys()
 		except Exception as e:
 			print("[ERROR] File listing error:",e)
 
@@ -64,7 +64,7 @@ class IndexServer(threading.Thread):
 	def search(self, file):
 		try:
 			if file in self.registered_files:
-				peers = registered_files[file]
+				peers = self.registered_files[file]
 			else:
 				peers=[]
 			return peers
@@ -85,10 +85,10 @@ class IndexServer(threading.Thread):
 							if len(self.registered_files[file])==0:
 								self.registered_files.pop(file,None)
 
-			if peer_id in peer_files:
+			if peer_id in self.peer_files:
 				self.peer_files.pop(peer_id,None)
 
-			if port in peer_ports:
+			if port in self.peer_ports:
 				self.peer_ports.pop(port,None)
 
 			return True
@@ -158,9 +158,9 @@ class IndexServer(threading.Thread):
 							executor = worker.submit(self.deregister,msg_received)
 							res = executor.result(timeout=None)
 							if res:
-								print("Deregistration successful for peer {}:{}".format(addr[0],msg_received['peer_port']))
+								print("Deregistration successful for peer {}:{}".format(addr[0],msg_received['hosting_port']))
 							else:
-								print("Deregistration unsuccessful for peer {}:{}".format(addr[0],msg_received['peer_port']))
+								print("Deregistration unsuccessful for peer {}:{}".format(addr[0],msg_received['hosting_port']))
 
 							conn.send(json.dumps(res))
 
