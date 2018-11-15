@@ -17,6 +17,21 @@ def get_args():
 	args = parser.parse_args()
 	return args
 
+def convert_to_bytes(no):
+	result = bytearray()
+	result.append(no & 255)
+	for i in range(3):
+		no = no >> 8
+		result.append(no & 255)
+	return result
+
+def bytes_to_number(b):
+	# if Python2.x
+	b = map(ord, b)
+	res = 0
+	for i in range(4):
+		res += b[i] << (i*8)
+	return res
 
 class PeerOperations(threading.Thread):
 
@@ -52,13 +67,47 @@ class PeerOperations(threading.Thread):
 
 	def upload(self,conn,recv_data):
 		try:
-			file = open(PUBLIC_DIR+'/'+recv_data['file_name'],'rb')
-			data = file.read()
-			conn.sendall(data)
+			print '$$$$ ', recv_data['file_name']
+			file_size = os.path.getsize(PUBLIC_DIR+'/'+recv_data['file_name'])
+			print '$$$$', file_size
+			conn.sendall(convert_to_bytes(file_size))
+			with open(PUBLIC_DIR+'/'+recv_data['file_name'],'rb') as file:
+				data = file.read(1024)
+				while data:
+					conn.sendall(data)
+					data = file.read(1024)
 			conn.close()
 
 		except Exception as e:
 			print 'File Upload error : ', e
+
+	def upload_chunk(self, conn, recv_data):
+		try:
+			print '$$$$ ', recv_data['file_name']
+			file_size = os.path.getsize(PUBLIC_DIR+'/'+recv_data['file_name'])
+			print '$$$$', file_size
+			chunk_id = recv_data['chunk_id']
+			total_chunk = recv_data['total_chunk']
+			conn.sendall(convert_to_bytes(file_size))
+			with open(PUBLIC_DIR+'/'+recv_data['file_name'],'rb') as file:
+				# data = file.read(1024)
+				curr_size=0
+				start = int(chunk_id*file_size/total_chunk)
+				file.seek(start)
+				while curr_size*total_chunk < file_size:
+					data = file.read(1024)
+					if len(data) + curr_size > file_size/total_chunk:
+						data = data[:(file_size/total_chunk)-curr_size]
+						conn.sendall(data)
+						break
+					conn.sendall(data)
+					curr_size += len(data)
+
+			conn.close()
+
+		except Exception as e:
+			print 'File Upload error : ', e
+
 
 	def host(self):
 		try:
@@ -68,7 +117,7 @@ class PeerOperations(threading.Thread):
 						conn, addr = self.listener_queue.get()
 						recv_data = json.loads(conn.recv(1024))
 						# print recv_data
-						temp = executor.submit(self.upload, conn, recv_data)
+						temp = executor.submit(self.upload_chunk, conn, recv_data)
 		except Exception as e:
 			print 'Hosting error : ', e
 
@@ -275,13 +324,24 @@ class Peer():
 				'file_name' : f_name 
 			}
 			ps_socket.sendall(json.dumps(peer_info))
-			# print '####### ', ps_socket.recv(1024000)
-			# recv_data = json.loads(ps_socket.recv(1024000))
-			recv_data = ps_socket.recv(1024000)
-			# print ps_socket.recv(1024000)
-			# print '###### ',recv_data
+
+			file_size = ps_socket.recv(4)
+			file_size = bytes_to_number(file_size)
+			print '###### ', file_size
+			curr_size = 0
+			buff = b""
+			while curr_size < file_size:
+				data = ps_socket.recv(1024)
+				if not data:
+					break
+				if len(data) + curr_size > file_size:
+					data = data[:file_size-curr_size] # trim additional data
+				buff += data
+				# you can stream here to disk
+				curr_size += len(data)
+			# you have entire file in memory
 			f = open(PUBLIC_DIR+ '/' + f_name, 'wb')
-			f.write(recv_data)
+			f.write(buff)
 			f.close()
 			print "File downloaded successfully"
 			ps_socket.close()
@@ -290,6 +350,85 @@ class Peer():
 		except Exception as e:
 			print "Error while downloading file, %s" %e
 			return -1
+
+	def get_chunk(self, file_name, peer_id, chunk_id, total_chunk, data):
+		try:
+			ip, port = peer_id.split(':')
+			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+			sock.connect((ip, int(port)))
+			peer_info = {
+						'command': 'get_chunk',
+						'file_name': file_name,
+						'chunk_id': chunk_id,
+						'total_chunk': total_chunk
+					}
+			sock.sendall(json.dumps(peer_info))
+
+			file_size = sock.recv(4)
+			file_size = bytes_to_number(file_size)
+			print '###### ', file_size
+			curr_size = 0
+			buff = ""
+			while curr_size*total_chunk < file_size:
+				dat = sock.recv(1024)
+				if not dat:
+					break
+				if len(dat) + curr_size > file_size:
+					dat = dat[:file_size-curr_size] # trim additional data
+
+				buff = str(buff) + str(dat)
+
+				# you can stream here to disk
+				curr_size += len(dat)
+			# you have entire file in memory
+			sock.close()
+
+
+			data[chunk_id] = buff
+
+		except Exception as e:
+			print "get Chunk error", e
+
+
+
+	def get_files_concurrently(self, file_name):
+		try:
+			peer_list = self.search_file(file_name)
+
+			if len(peer_list)==0:
+				print "File not available"
+			elif self.peer_id in peer_list:
+				print "File present locally"
+			else:
+				threads = []
+				data = {}
+				for pid in range(len(peer_list)):
+					child_thread = threading.Thread(target=self.get_chunk, args=(file_name,peer_list[pid],pid,len(peer_list), data))
+					# child_thread.setDaemon(True)
+					child_thread.start()
+					threads.append(child_thread)
+
+				try:
+					for thread in threads:
+						thread.join()
+
+					complete_data = ""
+					for k in data:
+						complete_data+=data[k]
+
+					f = open(PUBLIC_DIR+ '/' + file_name, 'wb')
+					f.write(complete_data)
+					f.close()
+					print "File downloaded successfully"
+					return 1
+				except Exception as e:
+					print "Thread shitttt", e
+
+		except Exception as e:
+			print "Concurrent file transfer error:",e
+			return -1
+
 
 	def log_out(self):
 		try:
@@ -354,9 +493,10 @@ if __name__ == '__main__':
 			elif int(ops) == 3:
 				print "Enter the required File Name: "
 				file_name = raw_input()
-				print "Enter Peer ID: "
-				peer_request_id = raw_input()
-				peer.get_file(file_name, peer_request_id)
+				# print "Enter Peer ID: "
+				# peer_request_id = raw_input()
+				# peer.get_file(file_name, peer_request_id)
+				peer.get_files_concurrently(file_name)
 
 			elif int(ops) == 4:
 				peer.log_out()
