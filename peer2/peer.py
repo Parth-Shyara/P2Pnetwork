@@ -8,7 +8,7 @@ import threading
 from Queue import Queue
 from concurrent import futures
 
-PUBLIC_DIR = "./Public-Files"
+PUBLIC_DIR = "Public-Files"
 
 def get_args():
 	parser = argparse.ArgumentParser()
@@ -17,6 +17,21 @@ def get_args():
 	args = parser.parse_args()
 	return args
 
+def convert_to_bytes(no):
+	result = bytearray()
+	result.append(no & 255)
+	for i in range(3):
+		no = no >> 8
+		result.append(no & 255)
+	return result
+
+def bytes_to_number(b):
+	# if Python2.x
+	b = map(ord, b)
+	res = 0
+	for i in range(4):
+		res += b[i] << (i*8)
+	return res
 
 class PeerOperations(threading.Thread):
 
@@ -52,9 +67,15 @@ class PeerOperations(threading.Thread):
 
 	def upload(self,conn,recv_data):
 		try:
-			file = open(PUBLIC_DIR+'/'+recv_data['file_name'],'rb')
-			data = file.read()
-			conn.sendall(data)
+			print '$$$$ ', recv_data['file_name']
+			file_size = os.path.getsize(PUBLIC_DIR+'/'+recv_data['file_name'])
+			print '$$$$', file_size
+			conn.sendall(convert_to_bytes(file_size))
+			with open(PUBLIC_DIR+'/'+recv_data['file_name'],'rb') as file:
+				data = file.read(1024)
+				while data:
+					conn.sendall(data)
+					data = file.read(1024)
 			conn.close()
 
 		except Exception as e:
@@ -275,13 +296,24 @@ class Peer():
 				'file_name' : f_name 
 			}
 			ps_socket.sendall(json.dumps(peer_info))
-			# print '####### ', ps_socket.recv(1024000)
-			# recv_data = json.loads(ps_socket.recv(1024000))
-			recv_data = ps_socket.recv(1024000)
-			# print ps_socket.recv(1024000)
-			# print '###### ',recv_data
+
+			file_size = ps_socket.recv(4)
+			file_size = bytes_to_number(file_size)
+			print '###### ', file_size
+			curr_size = 0
+			buff = b""
+			while curr_size < file_size:
+				data = ps_socket.recv(1024)
+				if not data:
+					break
+				if len(data) + curr_size > file_size:
+					data = data[:file_size-curr_size] # trim additional data
+				buff += data
+				# you can stream here to disk
+				curr_size += len(data)
+			# you have entire file in memory
 			f = open(PUBLIC_DIR+ '/' + f_name, 'wb')
-			f.write(recv_data)
+			f.write(buff)
 			f.close()
 			print "File downloaded successfully"
 			ps_socket.close()
