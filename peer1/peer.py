@@ -233,6 +233,7 @@ class Peer():
 			s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 			s.bind(('',0))
 			free_socket = s.getsockname()[1]
+			print free_socket
 			s.close()
 			return free_socket
 		except Exception as e:
